@@ -86,7 +86,40 @@ void ParticleFilter::resample() {
 	// TODO: Resample particles with replacement with probability proportional to their weight. 
 	// NOTE: You may find std::discrete_distribution helpful here.
 	//   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
+    // simultaneously normalize weights and find the max
+    double total_weight = 0;
+    for (int i = 0; i < num_particles; ++i) {
+        total_weight += particles[i].weight;
+    }
+    double w_max = 0;
+    for (int i = 0; i < num_particles; ++i) {
+        particles[i].weight /= total_weight;
+        if (particles[i].weight > w_max) {
+            w_max = particles[i].weight;
+        }
+    }
 
+    std::random_device rd;
+    std::default_random_engine gen(rd());
+
+    std::uniform_int_distribution<int> int_dist(0, num_particles - 1);
+    int index = int_dist(gen);
+
+    std::uniform_real_distribution<double> weight_dist(0, 2 * w_max);
+    double beta = 0;
+
+    // resample particles using wheel method
+    std::vector<Particle> resampled_particles;
+    for (int i = 0; i < num_particles; ++i) {
+        beta += weight_dist(gen);
+        while (particles[index].weight < beta) {
+            beta -= particles[index].weight;
+            index = (index + 1) % num_particles;
+        }
+        resampled_particles.push_back(particles[index]);
+    }
+
+    particles = resampled_particles;
 }
 
 void ParticleFilter::write(std::string filename) {
