@@ -13,7 +13,8 @@
 #include "particle_filter.h"
 
 void ParticleFilter::init(double x, double y, double theta, double std[]) {
-    std::default_random_engine gen;
+    std::random_device rd;
+    std::default_random_engine gen(rd());
 
     std::normal_distribution<double> dist_x(x, std[0]);
     std::normal_distribution<double> dist_y(y, std[1]);
@@ -31,7 +32,8 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
 }
 
 void ParticleFilter::prediction(double delta_t, double std_pos[], double velocity, double yaw_rate) {
-    std::default_random_engine gen;
+    std::random_device rd;
+    std::default_random_engine gen(rd());
 
     for (int i = 0; i < num_particles; ++i) {
         Particle particle = particles[i];
