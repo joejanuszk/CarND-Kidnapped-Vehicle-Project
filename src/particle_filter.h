@@ -94,6 +94,10 @@ public:
 	 *   the new set of particles.
 	 */
 	void resample();
+
+    double getDistanceBetweenParticleAndLandmark(const Particle &particle, const Map::single_landmark_s &landmark);
+
+    double getDistanceBetweenCoords(double ax, double ay, double bx, double by);
 	
 	/*
 	 * write Writes particle positions to a file.

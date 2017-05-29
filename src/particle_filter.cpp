@@ -20,7 +20,7 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
     std::normal_distribution<double> dist_y(y, std[1]);
     std::normal_distribution<double> dist_theta(theta, std[2]);
 
-    num_particles = 100;
+    num_particles = 500;
     particles.resize(num_particles);
 
     for (int i = 0; i < num_particles; ++i) {
@@ -53,12 +53,25 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
         std::normal_distribution<double> dist_y(yf, std_pos[1]);
         std::normal_distribution<double> dist_t(tf, std_pos[2]);
 
-        particle.x = dist_x(gen);
-        particle.y = dist_y(gen);
-        particle.theta = dist_t(gen);
-
-        particles[i] = particle;
+        particles[i].x = dist_x(gen);
+        particles[i].y = dist_y(gen);
+        particles[i].theta = dist_t(gen);
     }
+}
+
+double ParticleFilter::getDistanceBetweenParticleAndLandmark(const Particle &particle,
+                                                             const Map::single_landmark_s &landmark) {
+    double dx = landmark.x_f - particle.x;
+    double dy = landmark.y_f - particle.y;
+    double distance = sqrt(dx * dx + dy * dy);
+    return distance;
+}
+
+double ParticleFilter::getDistanceBetweenCoords(double ax, double ay, double bx, double by) {
+    double dx = bx - ax;
+    double dy = by - ay;
+    double distance = sqrt(dx * dx + dy * dy);
+    return distance;
 }
 
 void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted, std::vector<LandmarkObs>& observations) {
@@ -82,6 +95,64 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 	//   3.33. Note that you'll need to switch the minus sign in that equation to a plus to account 
 	//   for the fact that the map's y-axis actually points downwards.)
 	//   http://planning.cs.uiuc.edu/node99.html
+    for (int i = 0; i < particles.size(); ++i) {
+        Particle particle = particles[i];
+
+        // find all landmarks within range of particle
+        std::vector<LandmarkObs> predicted;
+        for (int j = 0; j < map_landmarks.landmark_list.size(); ++j) {
+            Map::single_landmark_s landmark = map_landmarks.landmark_list[j];
+            double distance_to_landmark = getDistanceBetweenParticleAndLandmark(particle, landmark);
+            if (distance_to_landmark <= sensor_range) {
+                LandmarkObs in_range_landmark = {
+                    landmark.id_i,
+                    static_cast<double>(landmark.x_f),
+                    static_cast<double>(landmark.y_f)
+                };
+                predicted.push_back(in_range_landmark);
+            }
+        }
+
+        // if no nearby landmarks, reject this particle
+        if (predicted.size() == 0) {
+            particles[i].weight = 0;
+            continue;
+        }
+
+        // otherwise, associate observations with landmarks
+        double w = 1;
+        for (int j = 0; j < observations.size(); ++j) {
+            LandmarkObs obs = observations[j];
+            double obs_x = obs.x * cos(particle.theta) - obs.y * sin(particle.theta) + particle.x;
+            double obs_y = obs.x * sin(particle.theta) + obs.y * cos(particle.theta) + particle.y;
+
+            // use nearest neighbor to match predicted
+            // landmarks to closest observation.
+            // use first prediction as baseline to compare others
+            double pred_x = predicted[0].x;
+            double pred_y = predicted[0].y;
+            double min_dist = getDistanceBetweenCoords(obs_x, obs_y, pred_x, pred_y);
+            for (int k = 1; k < predicted.size(); ++k) {
+                double curr_dist = getDistanceBetweenCoords(obs_x, obs_y, predicted[k].x, predicted[k].y);
+                if (curr_dist < min_dist) {
+                    min_dist = curr_dist;
+                    pred_x = predicted[k].x;
+                    pred_y = predicted[k].y;
+                }
+            }
+
+            // update weight using Multivariate Gaussian probability
+            double dx = obs_x - pred_x;
+            double dy = obs_y - pred_y;
+            double this_w = exp(-(
+                    ( (dx * dx) / (2 * std_landmark[0] * std_landmark[0]) ) +
+                    ( (dy * dy) / (2 * std_landmark[1] * std_landmark[1]) )
+                    )) * (1. / (2 * M_PI * std_landmark[0] * std_landmark[1]));
+            w *= this_w;
+        }
+
+        particles[i].weight = w;
+    }
 }
 
 void ParticleFilter::resample() {
